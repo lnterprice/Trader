@@ -12,12 +12,12 @@ def symbolQuotes(symbols):
 	time = ""
 	for symbol in symbols:
 		quote = Symbol(session, symbol)
-		#if(quote.isOnline()):
-		quotes['quotes'][symbol] = {'date': quote.tlastTrade(), 'price': quote.getQuote()}
-		time = pd.to_datetime(quotes['quotes'][symbol]['date'], unit='s').date()
-		#else:
-		#	return -1
-		#	break
+		if(quote.isOnline()):
+			quotes['quotes'][symbol] = {'date': quote.tlastTrade(), 'price': quote.getQuote()}
+			time = pd.to_datetime(quotes['quotes'][symbol]['date'], unit='s').date()
+		else:
+			return -1
+			break
 	quotes['day'] = str(time)
 	return quotes
 
@@ -72,14 +72,9 @@ if __name__ == "__main__":
 			currentFile = os.path.join(fileBasePath, quote + ".csv")
 			time = quotes['quotes'][quote]['date']
 			quotePrice = quotes['quotes'][quote]['price']
-			date = pd.to_datetime(time, unit='s')
-			date = date.tz_localize("UTC")
-			date = date.tz_convert('America/Los_Angeles')
-			date = date.time()
-			date = date.strftime("%I:%M:%S %p")
 			tempDict = pd.DataFrame([{
 
-				'date': date,
+				'date': time,
 				'price': float(quotePrice),
 				'color': quote,
 				'custom_data': quote
