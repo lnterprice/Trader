@@ -6,17 +6,18 @@ from SymbolObj import Symbol
 import pandas as pd
 import time as tm
 import os
+import datetime
 def symbolQuotes(symbols):
 	quotes = {'quotes': {}, 'day': {}}
 	time = ""
 	for symbol in symbols:
 		quote = Symbol(session, symbol)
-		if(quote.isOnline()):
-			quotes['quotes'][symbol] = {'date': quote.tlastTrade(), 'price': quote.getQuote()}
-			time = pd.to_datetime(quotes['quotes'][symbol]['date'], unit='s').date()
-		else:
-			return -1
-			break
+		#if(quote.isOnline()):
+		quotes['quotes'][symbol] = {'date': quote.tlastTrade(), 'price': quote.getQuote()}
+		time = pd.to_datetime(quotes['quotes'][symbol]['date'], unit='s').date()
+		#else:
+		#	return -1
+		#	break
 	quotes['day'] = str(time)
 	return quotes
 
@@ -49,11 +50,9 @@ if __name__ == "__main__":
 	symbols = symbols.split(" ")
 	quotes = symbolQuotes(symbols)
 	try:
-		fileBasePath = os.path.join('C:\\Users\\Sphi0\\OneDrive\\Documents\\Python Projects\\Stocker\\DataSheets', quotes['day'])
+		fileBasePath = os.path.join('D:\\Data Sheets', quotes['day'])
 	except TypeError:
 		print("Stock market isn't open!")
-		pdb.set_trace()
-		session.get(etrade.base_url + "/oauth/revoke_access_token")
 		exit()
 	try:
 		os.mkdir(fileBasePath)
@@ -62,20 +61,25 @@ if __name__ == "__main__":
 	
 	for quote in quotes['quotes']:
 		try:
-			f = open(os.path.join(fileBasePath, quote + ".csv"), "w")
+			f = open(os.path.join(fileBasePath, quote + ".csv"), "x")
 			f.close()
 			df = pd.DataFrame(columns=['date', 'price', 'color', 'custom_data'])
 			df.to_csv(os.path.join(fileBasePath, quote + ".csv"), index=False)
-		except FileExistsError:
+		except FileExistsError or PermissionError:
 			pass
 	while quotes != -1:
 		for i, quote in enumerate(quotes['quotes']):
 			currentFile = os.path.join(fileBasePath, quote + ".csv")
 			time = quotes['quotes'][quote]['date']
 			quotePrice = quotes['quotes'][quote]['price']
+			date = pd.to_datetime(time, unit='s')
+			date = date.tz_localize("UTC")
+			date = date.tz_convert('America/Los_Angeles')
+			date = date.time()
+			date = date.strftime("%I:%M:%S %p")
 			tempDict = pd.DataFrame([{
 
-				'date': pd.to_datetime(time, unit='s'),
+				'date': date,
 				'price': float(quotePrice),
 				'color': quote,
 				'custom_data': quote
