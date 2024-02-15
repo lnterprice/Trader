@@ -1,94 +1,83 @@
-import json
-import webbrowser
-from rauth import OAuth1Service
-import pdb
-from SymbolObj import Symbol
 import pandas as pd
-import time as tm
 import os
-import datetime
-def symbolQuotes(symbols):
-	quotes = {'quotes': {}, 'day': {}}
-	time = ""
-	for symbol in symbols:
-		quote = Symbol(session, symbol)
-		if(quote.isOnline()):
-		quotes['quotes'][symbol] = {'date': quote.tlastTrade(), 'price': quote.getQuote()}
-		time = pd.to_datetime(quotes['quotes'][symbol]['date'], unit='s').date()
-		else:
-			return -1
-			break
-	quotes['day'] = str(time)
-	return quotes
+import pdb
+import plotly.graph_objects as go
+import plotly.express as px
+from dash import Dash, dcc, html, Input, Output
+basePath = "C:\\Users\\Sphi0\\OneDrive\\Documents\\Python Projects\\Stocker\\DataSheets"
+osDates = os.listdir(basePath)
+app = Dash(__name__)
 
-def createOAuth():
-	global session
-	global etrade
-	CONSUMER_KEY = os.environ['CONSUMER_KEY']
-	CONSUMER_SECRET = os.environ['CONSUMER_SECRET']
-	etrade = OAuth1Service(
-		name="etrade",
-		consumer_key=CONSUMER_KEY,
-	    consumer_secret=CONSUMER_SECRET,
-	    request_token_url="https://api.etrade.com/oauth/request_token",
-	    access_token_url="https://api.etrade.com/oauth/access_token",
-	    authorize_url="https://us.etrade.com/e/t/etws/authorize?key={}&token={}",
-	    base_url="https://api.etrade.com")
-	# Requests token to confirm application usage by the user
-	request_token, request_token_secret = etrade.get_request_token(params={"oauth_callback": "oob", "format": "json"})
-	# Url creation for user confirmation
-	authorize_url = etrade.authorize_url.format(etrade.consumer_key, request_token)
-	webbrowser.open(authorize_url)
-	code = input("Code: ")
-	# Requests token verifier, in this case, code
-	session = etrade.get_auth_session(request_token, request_token_secret, params={"oauth_verifier": code})
+app.layout = html.Div([
+	html.H1('Stock price analysis'),
+	html.P('Select Date:'),
+	dcc.Dropdown(
+		id='dates',
+		options=osDates,
+		value=osDates[-1],
+		clearable=False
+	),
+	dcc.Graph(id="timeChart"),
+	html.P("Select Stock:"),
+	dcc.Dropdown(
+		id="plots",
+		clearable=False,
+	),
+	html.P("Select Indicators:"),
+	dcc.Checklist(
+		id='strats',
+		options={
+			'EMACROSSOVER 9 20': 'EMA CoS 9/20',
+			'EMACROSSOVER 5 10': 'EMA CoS 5/10',
+			'EMACROSSOVER 50 200': 'EMA CoS 50/200'
+		},
+		value=['EMACROSSOVER 9 20']
+	)
+])
 
-if __name__ == "__main__":
-	createOAuth()
-	symbols = input("Enter symbols: ")
-	symbols = symbols.upper()
-	symbols = symbols.split(" ")
-	quotes = symbolQuotes(symbols)
+def EMACROSSOVER(fig, df, inputs):
+	low = inputs[0]
+	high = inputs[1]
+	df['EMA' + low] = df['price'].ewm(span=int(low), adjust=False).mean()
+	df['EMA' + high] = df['price'].ewm(span=int(high), adjust=False).mean()
+	fig.add_trace(go.Scatter(x=df['date'], y=df['EMA' + low], name='EMA' + low))
+	fig.add_trace(go.Scatter(x=df['date'], y=df['EMA' + high], name='EMA' + high))
+
+
+@app.callback(Output('plots', 'options'), Output('plots', 'value'), Input('dates', 'value'))
+def getSyms(date):
+	listStocks = os.listdir(os.path.join(basePath, date))
+	for i, element in enumerate(listStocks):
+		listStocks[i] = element[:-4]
+	return listStocks, listStocks[0]
+
+
+@app.callback(Output('timeChart', 'figure'), Input('dates', 'value'), Input('plots', 'value'), Input('strats', 'value'), Input('timeChart', 'relayoutData'))
+def update_graph(date, ticker, strats, zoomLevel):
+	df = pd.read_csv(os.path.join(basePath, date, ticker + ".csv"))
+	fig = go.Figure()
+	fig.add_trace(go.Scatter(x=df['date'], y=df['price'], name=ticker))
 	try:
-		fileBasePath = os.path.join('D:\\Data Sheets', quotes['day'])
+		strats = tuple(strats)
+		for strat in strats:
+			strat = strat.split(" ")
+			indicator, inputs = strat[0], strat[1:]
+			exec(f"{indicator}(fig, df, inputs)")
 	except TypeError:
-		print("Stock market isn't open!")
-		exit()
-	try:
-		os.mkdir(fileBasePath)
-	except FileExistsError:
 		pass
-	
-	for quote in quotes['quotes']:
-		try:
-			f = open(os.path.join(fileBasePath, quote + ".csv"), "x")
-			f.close()
-			df = pd.DataFrame(columns=['date', 'price', 'color', 'custom_data'])
-			df.to_csv(os.path.join(fileBasePath, quote + ".csv"), index=False)
-		except FileExistsError or PermissionError:
-			pass
-	while quotes != -1:
-		for i, quote in enumerate(quotes['quotes']):
-			currentFile = os.path.join(fileBasePath, quote + ".csv")
-			time = quotes['quotes'][quote]['date']
-			quotePrice = quotes['quotes'][quote]['price']
-			date = pd.to_datetime(time, unit='s')
-			date = date.tz_localize("UTC")
-			date = date.tz_convert('America/Los_Angeles')
-			date = date.time()
-			date = date.strftime("%I:%M:%S %p")
-			tempDict = pd.DataFrame([{
+	try:
+		print(zoomLevel)
+		fig.update_layout(xaxis=dict(title='Time', tickmode='linear', tick0=-60, dtick=50), yaxis = dict(title='Price'), autosize=False, width=1920, height=1000, 
+			xaxis_range=[zoomLevel['xaxis.range[0]'], zoomLevel['xaxis.range[1]']],
+			yaxis_range=[zoomLevel['yaxis.range[0]'], zoomLevel['yaxis.range[1]']]
+		)
+	except TypeError:
+		fig.update_layout(xaxis=dict(title='Time', tickmode='linear', tick0=-60, dtick=50), yaxis = dict(title='Price'), autosize=False, width=1920, height=1000)
+	except KeyError:
+		fig.update_layout(xaxis=dict(title='Time', tickmode='linear', tick0=-60, dtick=50), yaxis = dict(title='Price'), autosize=False, width=1920, height=1000, 
+			xaxis_autorange=True,
+			yaxis_autorange=True
+		)
+	return fig
 
-				'date': date,
-				'price': float(quotePrice),
-				'color': quote,
-				'custom_data': quote
-
-				}])
-			df = pd.read_csv(currentFile)
-			df = pd.concat([df, tempDict], ignore_index=True)
-			df.to_csv(currentFile, index=False)
-		tm.sleep(30)
-		quotes = symbolQuotes(symbols)
-	print("Stock market has closed!")
-	session.get(etrade.base_url + "/oauth/revoke_access_token")
+app.run_server(debug=True)
