@@ -6,7 +6,6 @@ from SymbolObj import Symbol
 import pandas as pd
 import time as tm
 import os
-import datetime
 def symbolQuotes(symbols):
 	quotes = {'quotes': {}, 'day': {}}
 	time = ""
